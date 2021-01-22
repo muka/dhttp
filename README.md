@@ -1,6 +1,6 @@
 # dhttp 
 
-dhttp is a WebRTC to HTTP proxy.
+HTTP over WebRTC proxy.
 
 <div style="width: 50%; margin: 1em auto;">
     <img src="./docs/flow.png"/>
