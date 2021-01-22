@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package protobuf;
+
+message Header {
+    string key = 1;
+    repeated string values = 2;
+}
+
+message Request {
+    string method  = 1;
+    string url  = 2;
+    string protocol  = 3;
+    repeated Header headers = 4;
+    bytes body = 5;
+    string id = 6;
+}
+
+message Response {
+    repeated Header headers = 1;
+    bytes body = 2;
+    string id = 3;
+    int32 statusCode = 4;
+}
