@@ -14,11 +14,57 @@ message Request {
     repeated Header headers = 4;
     bytes body = 5;
     string id = 6;
+
+    // flags to comply with Web Request API
+    // https://developer.mozilla.org/en-US/docs/Web/API/Request
+
+    // cache
+    // Contains the cache mode of the request (e.g., default, reload, no-cache).
+
+    // credentials
+    // Contains the credentials of the request (e.g., omit, same-origin, include). The default is same-origin.
+
+    // destination
+    // Returns a string from the RequestDestination enum describing the request's destination. This is a string indicating the type of content being requested.
+
+    // integrity
+    // Contains the subresource integrity value of the request (e.g., sha256-BpfBw7ivV8q2jLiT13fxDYAe2tJllusRSZ273h2nFSE=).
+
+    // mode
+    // Contains the mode of the request (e.g., cors, no-cors, same-origin, navigate.)
+
+    // redirect
+    // Contains the mode for how redirects are handled. It may be one of follow, error, or manual.
+
+    // referrer
+    // Contains the referrer of the request (e.g., client).
+
+    // referrerPolicy
+    // Contains the referrer policy of the request (e.g., no-referrer).
+
 }
 
 message Response {
+
     repeated Header headers = 1;
     bytes body = 2;
     string id = 3;
-    int32 statusCode = 4;
+    
+    // The status code of the response. (This will be 200 for a success).
+    int32 status = 4;
+    
+    // The status message corresponding to the status code. (e.g., OK for 200).
+    string statusText = 5;
+
+    // ok
+    // A boolean indicating whether the response was successful (status in the range 200–299) or not.
+
+    // redirected
+    // Indicates whether or not the response is the result of a redirect (that is, its URL list has more than one entry).
+
+    // type
+    // The type of the response (e.g., basic, cors).
+
+    // url
+    // The URL of the response.
 }

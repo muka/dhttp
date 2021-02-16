@@ -8,7 +8,7 @@ HTTP over WebRTC proxy.
 
 ## Rationale
 
-This project is exploring and expanding the capabilities of the [PeerJS pyhthon](https://github.com/ambianic/peerjs-python) HTTP over WebRTC proxy module. 
+This project is exploring and expanding the capabilities of the [PeerJS python](https://github.com/ambianic/peerjs-python) HTTP over WebRTC proxy module. 
 
 The objective is to provide a standalone service to interact with local devices over webRTC, bypassing limitation from firewalls and network operators constraints.
 

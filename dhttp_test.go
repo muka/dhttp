@@ -1,15 +1,14 @@
 package dhttp
 
 import (
+	"context"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"testing"
-	"time"
 
-	"github.com/golang/protobuf/proto"
-	pb "github.com/muka/dhttp/protobuf"
 	"github.com/muka/peer"
-	"github.com/rs/xid"
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -21,7 +20,7 @@ func getOpts() peer.Options {
 	opts.Host = "localhost"
 	opts.Port = 9000
 	opts.Path = "/myapp"
-	opts.Debug = 2
+	opts.Debug = 0
 
 	return opts
 }
@@ -29,14 +28,14 @@ func getOpts() peer.Options {
 func createServer(serverHost string) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
-		rw.Header().Add("content-type", "text/html")
-		rw.Write([]byte(`<html><body><h1>Hello world!</h1></body></html>`))
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		logrus.Debugf("Echo %s", body)
+		rw.Write(body)
 	})
-	mux.HandleFunc("/json", func(rw http.ResponseWriter, r *http.Request) {
-		rw.Header().Add("content-type", "application/json")
-		rw.Write([]byte(`{ "hello": "world" }`))
-	})
-
 	server := &http.Server{Addr: serverHost, Handler: mux}
 	go func() {
 		if err := server.ListenAndServe(); err != nil {
@@ -47,61 +46,137 @@ func createServer(serverHost string) *http.Server {
 	return server
 }
 
-func TestStart(t *testing.T) {
+func initServer(t *testing.T, peerOpts peer.Options, serverHost string) (*Proxy, func()) {
+
+	proxyOpts := NewProxyOptions()
+	proxyOpts.Peer = peerOpts
+
+	proxy, err := NewProxy(proxyOpts)
+	assert.NoError(t, err)
+	assert.NotNil(t, proxy)
+	if err != nil {
+		t.Log(err)
+		t.FailNow()
+	}
+
+	httpServer := createServer(serverHost)
+
+	close := func() {
+		proxy.Close()
+		httpServer.Close()
+	}
+
+	return proxy, close
+}
+
+func initClient(t *testing.T, peerOpts peer.Options, proxyID string) *Client {
+
+	clientOptions := NewClientOptions()
+	clientOptions.peer = peerOpts
+	clientOptions.serverID = proxyID
+
+	c, err := NewClient(context.Background(), clientOptions)
+	assert.NoError(t, err)
+	if err != nil {
+		t.Log(err)
+		t.FailNow()
+	}
+
+	return c
+}
+
+func getClientServer(t *testing.T, serverHost string) (*Client, func()) {
+
+	peerOpts := getOpts()
+
+	proxy, close := initServer(t, peerOpts, serverHost)
+
+	c := initClient(t, peerOpts, proxy.GetID())
+
+	return c, close
+}
+
+func TestPost(t *testing.T) {
 
 	log.SetLevel(log.DebugLevel)
+	serverHost := ":54321"
+	c, close := getClientServer(t, serverHost)
+	defer close()
 
-	serviceID := xid.New().String()
-	clientID := xid.New().String()
-	opts := getOpts()
-
-	peer1, err := service(serviceID, opts)
+	payload := []byte(`{"message": "hello world"}`)
+	res, err := c.Post(
+		fmt.Sprintf("http://localhost%s/", serverHost),
+		payload,
+		http.Header{
+			"Content-Type": []string{"application/json"},
+		},
+	)
 	assert.NoError(t, err)
-	defer peer1.Close()
+	if err != nil {
+		t.FailNow()
+	}
 
-	serverHost := ":12345"
-	httpServer := createServer(serverHost)
-	defer httpServer.Close()
+	log.Debugf("Response: %s", res)
+	assert.Equal(t, payload, res)
+}
 
-	c, err := client(clientID, opts)
+func TestGet(t *testing.T) {
+
+	log.SetLevel(log.DebugLevel)
+	serverHost := ":54321"
+	c, close := getClientServer(t, serverHost)
+	defer close()
+
+	res, err := c.Get(
+		fmt.Sprintf("http://localhost%s/", serverHost),
+		http.Header{
+			"Content-Type": []string{"application/json"},
+		},
+	)
 	assert.NoError(t, err)
+	if err != nil {
+		t.FailNow()
+	}
 
-	conn1, err := c.Connect(serviceID, nil)
-	assert.NoError(t, err)
+	log.Debugf("Response: %s", res)
+}
 
-	done := make(chan bool)
+func TestParallelRequests(t *testing.T) {
 
-	conn1.On("open", func(data interface{}) {
+	log.SetLevel(log.DebugLevel)
+	serverHost := ":54321"
+	c, close := getClientServer(t, serverHost)
+	defer close()
 
-		conn1.On("data", func(data interface{}) {
-			res := new(pb.Response)
-			err := proto.Unmarshal(data.([]byte), res)
+	count := 1000
+	done := 0
+	for {
 
-			assert.NoError(t, err)
-			log.Debugf("Got response: %s", res.Body)
+		go func() {
 
-		})
-
-		req := &pb.Request{
-			Method:   "POST",
-			Url:      fmt.Sprintf("http://localhost%s/json", serverHost),
-			Id:       xid.New().String(),
-			Protocol: "HTTP/1.1",
-			Headers: []*pb.Header{
-				{
-					Key:    "Content-Type",
-					Values: []string{"application/json"},
+			payload := []byte(`{"message": "hello world"}`)
+			res, err := c.Post(
+				fmt.Sprintf("http://localhost%s/", serverHost),
+				payload,
+				http.Header{
+					"Content-Type": []string{"application/json"},
 				},
-			},
-			Body: []byte(`{"message": "hello world"}`),
+			)
+			assert.NoError(t, err)
+			if err != nil {
+				t.FailNow()
+			}
+
+			log.Debugf("Response: %s", res)
+			assert.Equal(t, payload, res)
+			done++
+		}()
+	}
+
+	for {
+		if done == count {
+			break
 		}
-		raw, err := proto.Marshal(req)
-		assert.NoError(t, err)
-		conn1.Send(raw, false)
-		done <- true
+	}
 
-	})
-
-	<-time.After(time.Millisecond * 500)
-	<-done
 }
