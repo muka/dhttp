@@ -149,8 +149,8 @@ func TestParallelRequests(t *testing.T) {
 	defer close()
 
 	count := 1000
-	done := 0
-	for {
+	total := 0
+	for i := 0; i < count; i++ {
 
 		go func() {
 
@@ -169,14 +169,16 @@ func TestParallelRequests(t *testing.T) {
 
 			log.Debugf("Response: %s", res)
 			assert.Equal(t, payload, res)
-			done++
+			total++
 		}()
+
 	}
 
 	for {
-		if done == count {
+		if total == count {
 			break
 		}
 	}
 
+	assert.Equal(t, count, total)
 }
